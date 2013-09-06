@@ -1,0 +1,48 @@
+#!/usr/bin/python
+
+import cv
+centerX = 160
+centerY = 120
+
+def on_mouse(event, x, y, flags, param):
+  if event==cv.CV_EVENT_LBUTTONDOWN:
+    #print "clicked ", x, ", ", y
+    global centerX
+    global centerY
+    centerX = x
+    centerY = y
+
+if __name__ == '__main__':
+  capture = cv.CaptureFromCAM(0)
+  #capture = cv.CaptureFromFile("bgr.mpg")
+  cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_WIDTH, 320)
+  cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+  polar = cv.CreateImage((360, 360), 8, 3)
+  img = cv.CreateImage((320, 240), 8, 3)
+
+  cv.NamedWindow('cam')
+  cv.NamedWindow('polar')
+
+  cv.SetMouseCallback("cam", on_mouse)
+  on_mouse(cv.CV_EVENT_LBUTTONDOWN, img.width/2, img.height/2, None, None)
+
+  M = 60
+
+  while True:
+    img = cv.QueryFrame(capture)
+    #cv.LogPolar(img, polar, (img.width/2, img.height/2), M+1, cv.CV_INTER_NN + cv.CV_WARP_FILL_OUTLIERS )
+    cv.LogPolar(img, polar, (centerX, centerY), M+1, cv.CV_INTER_NN + cv.CV_WARP_FILL_OUTLIERS )
+    cv.ShowImage('cam', img)
+    cv.ShowImage('polar', polar)
+
+    key = cv.WaitKey(10)
+    #print "key ",key
+    if key == 27:
+        break
+    elif key == 65362:
+        print "M=",M+1
+	M = (M + 5)%100
+    elif key == 65364:
+        print "M=",M+1
+	M = (M - 5)%100
+  cv.DestroyAllWindows()
