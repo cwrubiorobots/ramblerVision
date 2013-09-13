@@ -1,11 +1,15 @@
 #!/usr/bin/python
 
-import cv
+import cv, serial, struct
 from datetime import datetime
 
-centerX = 160
-centerY = 120
-#hsvcopy = None
+cyril = serial.Serial('/dev/ttyAMA0', 9600) #open first serial port and give it a good name
+print "Opened "+cyril.portstr+" for serial access"
+
+# the center of the reflector in the camera frame should be set here
+centerX = 160 #150 #175 #160
+centerY = 120 #125 #110 #120
+
 cropped = None
 img = None
 
@@ -18,9 +22,15 @@ def on_mouse(event, x, y, flags, param):
     centerY = y
 
 if __name__ == '__main__':
+  #This is the setup
+  datalog = open("data.log", "w+")
+  datalog.write("\n~~~=== Rambler Data Log Opened, " + str(datetime.now()) + " ===~~~\n")
+
   capture = cv.CaptureFromCAM(0)
+  #capture = cv.CaptureFromFile("../out2.mpg")
   cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_WIDTH, 320)
   cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+
   polar = cv.CreateImage((360, 360), 8, 3)
   cropped = cv.CreateImage((360, 40), 8, 3)
   #hsvcopy = cv.CreateImage((360, 40), 8, 3)
@@ -28,7 +38,7 @@ if __name__ == '__main__':
   
   cones = cv.CreateImage((360, 40), 8, 1)
 
-  arr = cv.CreateImage((360, 40), 8, 1)
+  arr = cv.CreateImage((360, 40), 8, 1) #separate 8-bit, 1-channel images for each color
   gee = cv.CreateImage((360, 40), 8, 1)
   bee = cv.CreateImage((360, 40), 8, 1)
 
@@ -55,16 +65,28 @@ if __name__ == '__main__':
   #cv.NamedWindow('gee')
   #cv.NamedWindow('bee')
 
+  ##GUI #Enable these lines to allow mouse interaction with the polar transform
   ##GUI cv.SetMouseCallback('cam', on_mouse)
   ##GUI on_mouse(cv.CV_EVENT_LBUTTONDOWN, centerX, centerY, None, None)
 
   # These (B,G,R) values determine the range of colors to detect as "cones".
-  #Calibration A: room 817
+  #Calibration A: finding cones in room 817
+  #lower = cv.Scalar(35,  90, 140) # (B, G, R)
+  #upper = cv.Scalar(70, 140, 255)
+  #Calibration B: finding green paper in 817
+  #lower = cv.Scalar(10,  90, 10)
+  #upper = cv.Scalar(99, 255, 90)
+  #Calibration C: finding orange paper in 817
+  #lower = cv.Scalar(50, 120, 190)
+  #upper = cv.Scalar(90, 160, 255)
+  #Calibration D: Cones in room 817
   lower = cv.Scalar(45,  90, 160) 
   upper = cv.Scalar(90, 180, 255)
 
+  # The magic number M determines how deep the polar transformation goes.
   M = 69
 
+  #This is the main loop
   while True:
     img = cv.QueryFrame(capture)
     cv.LogPolar(img, polar, (centerX, centerY), M+1, cv.CV_INTER_NN) #possible speedup - get subrect src
@@ -74,7 +96,7 @@ if __name__ == '__main__':
     cv.Flip(cropped) #just for viewing (possible speedup)
 
     cv.InRangeS(cropped, lower, upper, cones)
-    cv.Erode(cones, cones) # just once might be too much
+    cv.Erode(cones, cones) # just once might be too much, but unavoidable
 
     k = cv.CreateStructuringElementEx(3, 43, 1, 1, cv.CV_SHAPE_RECT) # create a 3x43 rectangular dilation element k
     cv.Dilate(cones, cones, k, 2) 
@@ -105,12 +127,40 @@ if __name__ == '__main__':
                 #print "edge case B"
                 bearingToLandmarks.append((c-s/2, s))
     #print ".", ss, "."
-    print str(datetime.now().time()), bearingToLandmarks, len(bearingToLandmarks)
-    
+
+    # Bearing output #TODO: CHECK VS REALITY
+    bearingToGoal = 111 # Default is to send a bogus bearing (not in range [-90, 90])
+    #if len(bearingToLandmarks) > 0:
+    #    bearingToGoal = derez(bearingToLandmarks[0][0])
+    output =  struct.pack('c','\xfa') \
+            + struct.pack('B', 0) \
+            + struct.pack('b', bearingToGoal) \
+            + struct.pack('B', 0) 
+    cyril.write(output)
+
+    #Data Logging
+    if (cyril.inWaiting() > 0): 
+      logdata = cyril.read(cyril.inWaiting())
+      a = 0
+      b = 0
+      for c in logdata:
+        if c == '\n':
+          datalog.write(str(datetime.now().time())+","+logdata[a:b]+","+ \
+                        str(len(bearingToLandmarks))+","+str(bearingToLandmarks)+"\n")
+          a = b + 1  # a only gets incremented on EOL
+        b = b + 1
+
+
+    #hacky data logging with stdio
+    #print str(datetime.now().time()), bearingToLandmarks, len(bearingToLandmarks)
+
+    #TODO: I dorget what this does, plz find out
     cv.Split(cropped, bee, gee, arr, None)
     #cv.CvtColor(cropped, hsvcopy, cv.CV_BGR2HSV)
     #cv.Split(hsvcopy, hue, sat, val, None)
 
+
+    #Display (should probably be disabled with a usage flag)
     ##GUI cv.ShowImage('cam', img)
     #cv.ShowImage('polar', polar)
     ##GUI cv.ShowImage('cones', cones)
@@ -125,9 +175,9 @@ if __name__ == '__main__':
     #cv.ShowImage('gee', gee)
     #cv.ShowImage('bee', bee)
 
-
     #print "(2,2) = ", arr[2,2], ", ", gee[2,2], ", ", bee[2,2]
-    key = cv.WaitKey(10)
+    key = 0 
+    #key = cv.WaitKey(10) # THIS REQUIRES AT LEAST ONE WINDOW 
     #print "key ",key
     if key == 27:
         break
