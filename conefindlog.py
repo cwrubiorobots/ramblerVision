@@ -145,10 +145,13 @@ if __name__ == '__main__':
       b = 0
       for c in logdata:
         if c == '\n':
-          datalog.write(str(datetime.now().time())+","+logdata[a:b]+","+ \
-                        str(len(bearingToLandmarks))+","+str(bearingToLandmarks)+"\n")
+          s = (str(datetime.now().time())+","+logdata[a:b]+","+ \
+               str(len(bearingToLandmarks))+","+str(bearingToLandmarks)+"\n")
+          datalog.write(s)
+	  print s
           a = b + 1  # a only gets incremented on EOL
         b = b + 1
+        print "!",
 
 
     #hacky data logging with stdio
