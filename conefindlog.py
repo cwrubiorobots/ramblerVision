@@ -10,16 +10,17 @@ print "Opened "+cyril.portstr+" for serial access"
 centerX = 160 #150 #175 #160
 centerY = 120 #125 #110 #120
 
-cropped = None
-img = None
+unwrapped = None
+cam = None
 
 def on_mouse(event, x, y, flags, param):
   if event==cv.CV_EVENT_LBUTTONDOWN:
-    print "clicked ", x, ", ", y  #, ": ", img[y,x]
-    global centerX
-    global centerY
-    centerX = x
-    centerY = y
+    #print "clicked ", x, ", ", y  #, ": ", cam[y,x]
+    print "clicked ", x, ", ", y, ": ", unwrapped[y,x]
+    #global centerX
+    #global centerY
+    #centerX = x
+    #centerY = y
 
 if __name__ == '__main__':
   #This is the setup
@@ -32,42 +33,21 @@ if __name__ == '__main__':
   cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
 
   polar = cv.CreateImage((360, 360), 8, 3)
-  cropped = cv.CreateImage((360, 40), 8, 3)
-  #hsvcopy = cv.CreateImage((360, 40), 8, 3)
-  img = cv.CreateImage((320, 240), 8, 3)
-  
+  unwrapped = cv.CreateImage((360, 40), 8, 3)
+  cam = cv.CreateImage((320, 240), 8, 3)
   cones = cv.CreateImage((360, 40), 8, 1)
 
-  arr = cv.CreateImage((360, 40), 8, 1) #separate 8-bit, 1-channel images for each color
-  gee = cv.CreateImage((360, 40), 8, 1)
-  bee = cv.CreateImage((360, 40), 8, 1)
-
-  #hue = cv.CreateImage((360, 40), 8, 1)
-  #sat = cv.CreateImage((360, 40), 8, 1)
-  #val = cv.CreateImage((360, 40), 8, 1)
-
-  ##GUI cv.NamedWindow('cam')
-  ##GUI cv.ResizeWindow('cam', 320,240)
-
-  ##GUI cv.NamedWindow('unwrapped')
-  ##GUI cv.ResizeWindow('unwrapped', 360,40)
-  #cv.NamedWindow('hsvcopy')
-  #cv.ResizeWindow('hsvcopy', 360,40)
-
-  #cv.NamedWindow('polar')
-  ##GUI cv.NamedWindow('cones')
-  
-  #cv.NamedWindow('hue')
-  #cv.NamedWindow('sat')
-  #cv.NamedWindow('val')
-  
-  #cv.NamedWindow('arr')
-  #cv.NamedWindow('gee')
-  #cv.NamedWindow('bee')
+  cv.NamedWindow('cam')
+  cv.ResizeWindow('cam', 320,240)
+  cv.NamedWindow('unwrapped')
+  cv.ResizeWindow('unwrapped', 360,40)
+  cv.NamedWindow('cones')
+  cv.ResizeWindow('cones', 360,40)
 
   ##GUI #Enable these lines to allow mouse interaction with the polar transform
   ##GUI cv.SetMouseCallback('cam', on_mouse)
-  ##GUI on_mouse(cv.CV_EVENT_LBUTTONDOWN, centerX, centerY, None, None)
+  #cv.SetMouseCallback('unwrapped', on_mouse)
+  ##CONFIG on_mouse(cv.CV_EVENT_LBUTTONDOWN, centerX, centerY, None, None)
 
   # These (B,G,R) values determine the range of colors to detect as "cones".
   #Calibration A: finding cones in room 817
@@ -80,7 +60,10 @@ if __name__ == '__main__':
   #lower = cv.Scalar(50, 120, 190)
   #upper = cv.Scalar(90, 160, 255)
   #Calibration D: Cones in room 817
-  lower = cv.Scalar(45,  90, 160) 
+  #lower = cv.Scalar(45,  90, 160) 
+  #upper = cv.Scalar(90, 180, 255)
+  #Calibration E: Arena in room 814
+  lower = cv.Scalar(55, 100, 160) 
   upper = cv.Scalar(90, 180, 255)
 
   # The magic number M determines how deep the polar transformation goes.
@@ -88,14 +71,14 @@ if __name__ == '__main__':
 
   #This is the main loop
   while True:
-    img = cv.QueryFrame(capture)
-    cv.LogPolar(img, polar, (centerX, centerY), M+1, cv.CV_INTER_NN) #possible speedup - get subrect src
-    #cropped = cv.GetSubRect(polar,(280,0,40,360))
-    #cv.Transpose(cropped, cropped)
-    cv.Transpose(cv.GetSubRect(polar,(280,0,40,360)), cropped)
-    cv.Flip(cropped) #just for viewing (possible speedup)
+    cam = cv.QueryFrame(capture)
+    cv.LogPolar(cam, polar, (centerX, centerY), M+1, cv.CV_INTER_NN) #possible speedup - get subrect src
+    #unwrapped = cv.GetSubRect(polar,(280,0,40,360))
+    #cv.Transpose(unwrapped, unwrapped)
+    cv.Transpose(cv.GetSubRect(polar,(280,0,40,360)), unwrapped)
+    cv.Flip(unwrapped) #just for viewing (possible speedup)
 
-    cv.InRangeS(cropped, lower, upper, cones)
+    cv.InRangeS(unwrapped, lower, upper, cones)
     cv.Erode(cones, cones) # just once might be too much, but unavoidable
 
     k = cv.CreateStructuringElementEx(3, 43, 1, 1, cv.CV_SHAPE_RECT) # create a 3x43 rectangular dilation element k
@@ -126,7 +109,7 @@ if __name__ == '__main__':
             else:
                 #print "edge case B"
                 bearingToLandmarks.append((c-s/2, s))
-    #print ".", ss, "."
+    print ss,
 
     # Bearing output #TODO: CHECK VS REALITY
     bearingToGoal = 111 # Default is to send a bogus bearing (not in range [-90, 90])
@@ -148,37 +131,22 @@ if __name__ == '__main__':
           s = (str(datetime.now().time())+","+logdata[a:b]+","+ \
                str(len(bearingToLandmarks))+","+str(bearingToLandmarks)+"\n")
           datalog.write(s)
-	  print s
+          #print s
           a = b + 1  # a only gets incremented on EOL
         b = b + 1
-        print "!",
-
+        #print "!",
 
     #hacky data logging with stdio
     #print str(datetime.now().time()), bearingToLandmarks, len(bearingToLandmarks)
 
-    #TODO: I dorget what this does, plz find out
-    cv.Split(cropped, bee, gee, arr, None)
-    #cv.CvtColor(cropped, hsvcopy, cv.CV_BGR2HSV)
-    #cv.Split(hsvcopy, hue, sat, val, None)
-
-
     #Display (should probably be disabled with a usage flag)
-    ##GUI cv.ShowImage('cam', img)
+    cv.ShowImage('cam', cam)
+    cv.ShowImage('cones', cones)
+    cv.ShowImage('unwrapped', unwrapped)
     #cv.ShowImage('polar', polar)
-    ##GUI cv.ShowImage('cones', cones)
     #cv.ShowImage('hsvcopy', hsvcopy)
-    ##GUI cv.ShowImage('unwrapped', cropped)
+    print "."
 
-    #cv.ShowImage('hue', hue)
-    #cv.ShowImage('sat', sat)
-    #cv.ShowImage('val', val)
-
-    #cv.ShowImage('arr', arr)
-    #cv.ShowImage('gee', gee)
-    #cv.ShowImage('bee', bee)
-
-    #print "(2,2) = ", arr[2,2], ", ", gee[2,2], ", ", bee[2,2]
     key = 0 
     #key = cv.WaitKey(10) # THIS REQUIRES AT LEAST ONE WINDOW 
     #print "key ",key
@@ -186,8 +154,8 @@ if __name__ == '__main__':
         break
     elif key == 65362:
         print "M=",M+1
-	M = (M + 5)%100
+        M = (M + 5)%100
     elif key == 65364:
         print "M=",M+1
-	M = (M - 5)%100
-  ##GUI cv.DestroyAllWindows()
+        M = (M - 5)%100
+  cv.DestroyAllWindows()
