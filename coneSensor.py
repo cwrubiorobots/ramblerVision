@@ -10,8 +10,8 @@ centerY = 120
 M = 69
 
 # define "orange" in a simple way
-lower = cv.Scalar(40, 100, 175) 
-upper = cv.Scalar(90, 180, 255)
+lower = cv.Scalar( 40, 100, 180) 
+upper = cv.Scalar(100, 180, 255)
 
 
 # mouse event callback
@@ -25,6 +25,7 @@ if __name__ == '__main__':
   # First check to see if the program was invoked with any options  
   parser = argparse.ArgumentParser(description='Measure bearings to orange landmarks.')
   parser.add_argument("-g", "--gui", action="store_true", help="Show video output") 
+  parser.add_argument("-d", "--debug", action="store_true", help="Enable debugging") 
   args = parser.parse_args()
   
   # open first serial port and give it a good name
@@ -43,7 +44,8 @@ if __name__ == '__main__':
   cones = cv.CreateImage((360, 40), 8, 1)
 
   if args.gui:
-    #cv.NamedWindow('cam')
+    #if args.debug: 
+      #cv.NamedWindow('cam')
     cv.NamedWindow('unwrapped')
     cv.NamedWindow('cones')
     cv.SetMouseCallback('unwrapped', on_mouse)
@@ -66,18 +68,20 @@ if __name__ == '__main__':
     
     # Use a tall thin structure to dilate the remaining 'on' pixels,
     # eliminating beacon range information, and making it easy to see which bearings have 'beacon' in them.
-    k = cv.CreateStructuringElementEx(3, 99, 1, 23, cv.CV_SHAPE_RECT)
+    k = cv.CreateStructuringElementEx(3, 99, 1, 39, cv.CV_SHAPE_RECT)
     cv.Dilate(cones, cones, k) 
     
     # Display the images from the three major steps of acquisition, transformation, and segmentation
     if args.gui:
-      #cv.ShowImage('cam', img)
+      #if args.debug:
+        #cv.ShowImage('cam', img)
       cv.ShowImage('unwrapped', unwrapped)
       cv.ShowImage('cones', cones)
 
     size = 0
     segments = 0
-    #print "found %d" % (segments),
+    if args.debug:
+      print "found %d" % (segments),
     bearings = []
     for i in xrange(360-2):
       # examine the current and next bearing's measurements
@@ -89,7 +93,8 @@ if __name__ == '__main__':
       elif (cur == 255 and nex == 0):
         # a segment of beacon has ended
         segments = segments + 1
-        #print segments,
+        if args.debug:
+          print segments,
         bearings.append([int(i-(size/2)), size])
         size = 0
       if (i == 360-2-1 and size != 0): # handle wraparound
@@ -101,9 +106,11 @@ if __name__ == '__main__':
             bearings.pop(0)
         else: # there is no wraparound, just end the segment
           segments = segments + 1
-          #print segments,
+          if args.debug:
+            print segments,
           bearings.append([int(i-(size/2)), size])
-    #print "segments: %s" % bearings
+    if args.debug:
+      print "segments: %s" % bearings
 
     # now that the measurements have been made, arrange them for logging
     bearingstring = ""
